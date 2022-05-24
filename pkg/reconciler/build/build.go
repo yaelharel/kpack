@@ -3,6 +3,7 @@ package build
 import (
 	"context"
 
+	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	k8s_errors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,6 +13,7 @@ import (
 	v1Listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"knative.dev/pkg/controller"
+	"knative.dev/pkg/logging/logkey"
 
 	buildapi "github.com/pivotal/kpack/pkg/apis/build/v1alpha2"
 	corev1alpha1 "github.com/pivotal/kpack/pkg/apis/core/v1alpha1"
@@ -48,7 +50,11 @@ func NewController(opt reconciler.Options, k8sClient k8sclient.Interface, inform
 		PodGenerator:      podGenerator,
 	}
 
-	impl := controller.NewImpl(c, opt.Logger, ReconcilerName)
+	logger := opt.Logger.With(
+		zap.String(logkey.Kind, buildapi.BuildCRName),
+	)
+
+	impl := controller.NewImpl(c, logger, ReconcilerName)
 
 	informer.Informer().AddEventHandler(reconciler.Handler(impl.Enqueue))
 
