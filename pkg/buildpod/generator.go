@@ -41,6 +41,7 @@ type Generator struct {
 	KeychainFactory registry.KeychainFactory
 	ImageFetcher    ImageFetcher
 	DynamicClient   dynamic.Interface
+	MaxPlatformAPI	string
 }
 
 type BuildPodable interface {
@@ -75,6 +76,7 @@ func (g *Generator) Generate(ctx context.Context, build BuildPodable) (*v1.Pod, 
 		Secrets:               secrets,
 		Bindings:              bindings,
 		ImagePullSecrets:      imagePullSecrets,
+		MaxPlatformAPI:        g.MaxPlatformAPI,
 	})
 }
 

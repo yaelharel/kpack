@@ -75,6 +75,7 @@ var (
 	completionImage        = flag.String("completion-image", os.Getenv("COMPLETION_IMAGE"), "The image used to finish a build")
 	completionWindowsImage = flag.String("completion-windows-image", os.Getenv("COMPLETION_WINDOWS_IMAGE"), "The image used to finish a build on windows")
 	enablePriorityClasses  = flag.Bool("enable-priority-classes", getEnvBool("ENABLE_PRIORITY_CLASSES", false), "if set to true, enables different pod priority classes for normal builds and automated builds")
+	maxPlatformAPI         = flag.String("max-platform-api", os.Getenv("MAXIMUM_PLATFORM_API_VERSION"), "The maximum supported platform API")
 )
 
 func main() {
@@ -151,6 +152,7 @@ func main() {
 		KeychainFactory: keychainFactory,
 		ImageFetcher:    &registry.Client{},
 		DynamicClient:   dynamicClient,
+		MaxPlatformAPI:  maxPlatformAPI,
 	}
 
 	gitResolver := git.NewResolver(k8sClient)

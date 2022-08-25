@@ -108,6 +108,7 @@ type BuildContext struct {
 	Secrets               []corev1.Secret
 	Bindings              []ServiceBinding
 	ImagePullSecrets      []corev1.LocalObjectReference
+	MaxPlatformAPI	      string
 }
 
 func (c BuildContext) os() string {
@@ -180,10 +181,22 @@ var (
 
 type stepModifier func(corev1.Container) corev1.Container
 
+func getMin(v1 *semver.Version, v2 *semver.Version) *semver.Version{
+	if v1.Compare(v2) < 0 {
+		return v1
+	}
+	return v2
+}
+
 func (b *Build) BuildPod(images BuildPodImages, buildContext BuildContext) (*corev1.Pod, error) {
-	platformAPI, err := buildContext.BuildPodBuilderConfig.highestSupportedPlatformAPI(b)
+	highestSupportedPlatformAPI, err := buildContext.BuildPodBuilderConfig.highestSupportedPlatformAPI(b)
 	if err != nil {
 		return nil, err
+	}
+
+	platformAPI := highestSupportedPlatformAPI
+	if buildContext.MaxPlatformAPI != "" {
+		platformAPI = getMin(semver.MustParse(buildContext.MaxPlatformAPI), highestSupportedPlatformAPI)
 	}
 
 	if b.rebasable(buildContext.BuildPodBuilderConfig.StackID) {
