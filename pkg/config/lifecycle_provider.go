@@ -40,6 +40,14 @@ func NewLifecycleProvider(client RegistryClient, keychainFactory registry.Keycha
 	}
 }
 
+func (l *LifecycleProvider) Digest() (string, error) {
+	lifecycle, err := l.lifecycle()
+	if err != nil {
+		return "", err
+	}
+	return lifecycle.digest.String(), nil
+}
+
 func (l *LifecycleProvider) LayerForOS(os string) (v1.Layer, cnb.LifecycleMetadata, error) {
 	lifecycle, err := l.lifecycle()
 	if err != nil {
