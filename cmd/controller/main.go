@@ -183,7 +183,7 @@ func main() {
 	}
 
 	lifecycleProvider := config.NewLifecycleProvider(&registry.Client{}, keychainFactory)
-	configMapWatcher.Watch(config.LifecycleConfigName, lifecycleProvider.UpdateImage)
+	//configMapWatcher.Watch(config.LifecycleConfigName, lifecycleProvider.UpdateImage)
 
 	builderCreator := &cnb.RemoteBuilderCreator{
 		RegistryClient:         &registry.Client{},
