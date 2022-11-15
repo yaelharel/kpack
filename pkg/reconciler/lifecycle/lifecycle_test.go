@@ -30,11 +30,12 @@ func testLifecycleReconciler(t *testing.T, when spec.G, it spec.S) {
 
 	var (
 		fakeTracker        = testhelpers.FakeTracker{}
-		lifecycleImage     = randomImage(t)
+		lifecycleImage     ggcrv1.Image
 		lifecycleImageRef  = "gcr.io/lifecycle@sha256:some-sha"
 		serviceAccountName = "lifecycle-sa"
 		namespace          = "kpack"
 		key                = types.NamespacedName{Namespace: namespace, Name: config.LifecycleConfigName}
+		lifecycleProvider  *config.LifecycleProvider
 	)
 
 	rt := testhelpers.ReconcilerTester(t,
@@ -54,11 +55,15 @@ func testLifecycleReconciler(t *testing.T, when spec.G, it spec.S) {
 			actionRecorderList := rtesting.ActionRecorderList{k8sfakeClient}
 			eventList := rtesting.EventList{Recorder: eventRecorder}
 
+			lifecycleImage = randomImage(t)
+
+			lifecycleProvider = config.NewLifecycleProvider(imageFetcher, fakeKeychainFactory)
+
 			r := &lifecycle.Reconciler{
 				Tracker:           fakeTracker,
 				K8sClient:         k8sfakeClient,
 				ConfigMapLister:   listers.GetConfigMapLister(),
-				LifecycleProvider: config.NewLifecycleProvider(imageFetcher, fakeKeychainFactory),
+				LifecycleProvider: lifecycleProvider,
 			}
 
 			return r, actionRecorderList, eventList
@@ -66,14 +71,16 @@ func testLifecycleReconciler(t *testing.T, when spec.G, it spec.S) {
 
 	when("Reconcile", func() {
 		it("can load lifecycle image", func() {
-
-			lifecycleConfigMap := corev1.ConfigMap{
+			//todo: fake entire lifecycle provider if we go through with just calling update image
+			lifecycleConfigMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      config.LifecycleConfigName,
 					Namespace: namespace,
 				},
 				Data: map[string]string{
-					config.LifecycleConfigKey:,
+					config.LifecycleConfigKey:     lifecycleImageRef,
+					"serviceAccountRef.name":      serviceAccountName,
+					"serviceAccountRef.namespace": namespace,
 				},
 			}
 

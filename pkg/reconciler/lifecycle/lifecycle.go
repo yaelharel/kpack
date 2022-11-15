@@ -3,11 +3,9 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/pivotal/kpack/pkg/config"
 	"github.com/pivotal/kpack/pkg/tracker"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -78,44 +76,48 @@ func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
 }
 
 func (c *Reconciler) reconcileLifecycleImage(ctx context.Context, configMap *corev1.ConfigMap) error {
-	/*
-		get current state of c.lifecycleProvider.data (type: lifecycle)
-		if current state == err: retry
-		else:
-		  if check current digest against digest in configmap: return
-		  else: retry
-	*/
-	digest, err := c.LifecycleProvider.Digest()
-	if err != nil {
-		return err
-	}
-	/*
-		Kind: ConfigMap
-		Name: lifecycle-image
-		Namespace: kpack
-		Data:
-		  image: "registry.io/foo"
-	*/
+	//todo: are there cases where we should return permanent errors
+	return c.LifecycleProvider.UpdateImage(configMap)
 
-	// TODO - ask whether we really need to check the digest or we can just call UpdateImage
-	// do we care if the image ref changes as long as the digest is the same (i.e same image in gcr vs ecr)
-	imageRef, ok := configMap.Data[config.LifecycleConfigKey]
-	if !ok {
-		return errors.Errorf("%s config invalid", config.LifecycleConfigName)
-	}
-	ref, err := name.ParseReference(imageRef)
-	if err != nil {
-		return err
-	}
-	// lifecycle digest has not changed
-	if ref.Identifier() == digest {
-		return nil
-	}
-
-	c.LifecycleProvider.UpdateImage(configMap)
-	/*
-		imageRef == "registry.io/foo
-		OR
-		imageRef == "registry.io/foo@sha256:abcdxyzetc
-	*/
+	///*
+	//	get current state of c.lifecycleProvider.data (type: lifecycle)
+	//	if current state == err: retry
+	//	else:
+	//	  if check current digest against digest in configmap: return
+	//	  else: retry
+	//*/
+	//digest, err := c.LifecycleProvider.Digest()
+	//if err != nil {
+	//	return err
+	//}
+	///*
+	//	Kind: ConfigMap
+	//	Name: lifecycle-image
+	//	Namespace: kpack
+	//	Data:
+	//	  image: "registry.io/foo"
+	//*/
+	//
+	//// TODO - ask whether we really need to check the digest or we can just call UpdateImage
+	//// do we care if the image ref changes as long as the digest is the same (i.e same image in gcr vs ecr)
+	//imageRef, ok := configMap.Data[config.LifecycleConfigKey]
+	//if !ok {
+	//	return errors.Errorf("%s config invalid", config.LifecycleConfigName)
+	//}
+	//ref, err := name.ParseReference(imageRef)
+	//if err != nil {
+	//	return err
+	//}
+	//// lifecycle digest has not changed
+	//if ref.Identifier() == digest {
+	//	return nil
+	//}
+	//
+	//c.LifecycleProvider.UpdateImage(configMap)
+	///*
+	//	imageRef == "registry.io/foo
+	//	OR
+	//	imageRef == "registry.io/foo@sha256:abcdxyzetc
+	//*/
+	//return nil
 }
