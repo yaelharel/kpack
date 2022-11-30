@@ -3,8 +3,8 @@ package lifecycle
 import (
 	"context"
 	"fmt"
-	"github.com/pivotal/kpack/pkg/config"
 	"github.com/pivotal/kpack/pkg/tracker"
+	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/types"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -18,13 +18,17 @@ import (
 	"github.com/pivotal/kpack/pkg/reconciler"
 )
 
+type LifecycleProvider interface {
+	UpdateImage(cm *corev1.ConfigMap) error
+}
+
 func NewController(
 	ctx context.Context,
 	opt reconciler.Options,
 	k8sClient k8sclient.Interface,
 	configmapName string,
 	configMapInformer coreinformers.ConfigMapInformer,
-	lifecycleProvider *config.LifecycleProvider,
+	lifecycleProvider LifecycleProvider,
 ) *controller.Impl {
 	key := types.NamespacedName{
 		Namespace: system.Namespace(),
@@ -57,7 +61,7 @@ type Reconciler struct {
 	ConfigMapLister   corelisters.ConfigMapLister
 	Tracker           reconciler.Tracker
 	K8sClient         k8sclient.Interface
-	LifecycleProvider *config.LifecycleProvider
+	LifecycleProvider LifecycleProvider
 }
 
 func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
@@ -70,5 +74,6 @@ func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
 	if err != nil {
 		return err
 	}
+
 	return c.LifecycleProvider.UpdateImage(lifecycleConfigMap)
 }

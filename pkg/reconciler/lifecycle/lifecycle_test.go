@@ -1,24 +1,21 @@
 package lifecycle_test
 
 import (
-	ggcrv1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/random"
-	"github.com/pivotal/kpack/pkg/config"
-	"github.com/pivotal/kpack/pkg/reconciler/lifecycle"
-	"github.com/pivotal/kpack/pkg/registry"
-	"github.com/pivotal/kpack/pkg/registry/registryfakes"
+	"context"
+	"fmt"
+	"testing"
+
 	"github.com/sclevine/spec"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/record"
-	"knative.dev/pkg/controller"
-	rtesting "knative.dev/pkg/reconciler/testing"
-	"testing"
 
+	"github.com/pivotal/kpack/pkg/config"
+	"github.com/pivotal/kpack/pkg/reconciler/lifecycle"
 	"github.com/pivotal/kpack/pkg/reconciler/testhelpers"
 )
 
@@ -30,88 +27,70 @@ func testLifecycleReconciler(t *testing.T, when spec.G, it spec.S) {
 
 	var (
 		fakeTracker        = testhelpers.FakeTracker{}
-		lifecycleImage     ggcrv1.Image
 		lifecycleImageRef  = "gcr.io/lifecycle@sha256:some-sha"
 		serviceAccountName = "lifecycle-sa"
 		namespace          = "kpack"
 		key                = types.NamespacedName{Namespace: namespace, Name: config.LifecycleConfigName}
-		lifecycleProvider  *config.LifecycleProvider
+		lifecycleProvider  = &fakeLifecycleProvider{}
 	)
 
-	rt := testhelpers.ReconcilerTester(t,
-		func(t *testing.T, row *rtesting.TableRow) (reconciler controller.Reconciler, lists rtesting.ActionRecorderList, list rtesting.EventList) {
-			listers := testhelpers.NewListers(row.Objects)
+	lifecycleConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      config.LifecycleConfigName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			config.LifecycleConfigKey:     lifecycleImageRef,
+			"serviceAccountRef.name":      serviceAccountName,
+			"serviceAccountRef.namespace": namespace,
+		},
+	}
+	listers := testhelpers.NewListers([]runtime.Object{lifecycleConfigMap})
+	k8sfakeClient := k8sfake.NewSimpleClientset(listers.GetKubeObjects()...)
 
-			k8sfakeClient := k8sfake.NewSimpleClientset(listers.GetKubeObjects()...)
-
-			imageFetcher := registryfakes.NewFakeClient()
-			fakeKeychain := &registryfakes.FakeKeychain{}
-			imageFetcher.AddImage(lifecycleImageRef, lifecycleImage, fakeKeychain)
-			fakeKeychainFactory := &registryfakes.FakeKeychainFactory{}
-			secretRef := registry.SecretRef{ServiceAccount: serviceAccountName, Namespace: namespace}
-			fakeKeychainFactory.AddKeychainForSecretRef(t, secretRef, fakeKeychain)
-
-			eventRecorder := record.NewFakeRecorder(10)
-			actionRecorderList := rtesting.ActionRecorderList{k8sfakeClient}
-			eventList := rtesting.EventList{Recorder: eventRecorder}
-
-			lifecycleImage = randomImage(t)
-
-			lifecycleProvider = config.NewLifecycleProvider(imageFetcher, fakeKeychainFactory)
-
-			r := &lifecycle.Reconciler{
-				Tracker:           fakeTracker,
-				K8sClient:         k8sfakeClient,
-				ConfigMapLister:   listers.GetConfigMapLister(),
-				LifecycleProvider: lifecycleProvider,
-			}
-
-			return r, actionRecorderList, eventList
-		})
+	r := &lifecycle.Reconciler{
+		Tracker:           fakeTracker,
+		K8sClient:         k8sfakeClient,
+		ConfigMapLister:   listers.GetConfigMapLister(),
+		LifecycleProvider: lifecycleProvider,
+	}
 
 	when("Reconcile", func() {
-		it("can load lifecycle image", func() {
-			//todo: fake entire lifecycle provider if we go through with just calling update image
-			lifecycleConfigMap := &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      config.LifecycleConfigName,
-					Namespace: namespace,
-				},
-				Data: map[string]string{
-					config.LifecycleConfigKey:     lifecycleImageRef,
-					"serviceAccountRef.name":      serviceAccountName,
-					"serviceAccountRef.namespace": namespace,
-				},
-			}
-
-			rt.Test(rtesting.TableRow{
-				Key: key.String(),
-				Objects: []runtime.Object{
-					lifecycleConfigMap,
-				},
-				WantErr: false,
-				//WantStatusUpdates: []clientgotesting.UpdateActionImpl{
-				//	{
-				//		Object: &buildapi.Image{
-				//			ObjectMeta: image.ObjectMeta,
-				//			Spec:       image.Spec,
-				//			Status: buildapi.ImageStatus{
-				//				Status: corev1alpha1.Status{
-				//					ObservedGeneration: updatedGeneration,
-				//					Conditions:         conditionReadyUnknown(),
-				//				},
-				//			},
-				//		},
-				//	},
-				//},
-			})
+		it("calls UpdateImage", func() {
+			err := r.Reconcile(context.TODO(), key.String())
+			require.NoError(t, err)
+			require.Len(t, lifecycleProvider.Calls, 1)
+			assert.Equal(t, lifecycleProvider.Calls[0], lifecycleConfigMap)
 		})
 
+		it("returns error if key is invalid", func() {
+			err := r.Reconcile(context.TODO(), "my-namespace/fake/config-map")
+			require.Error(t, err, "unexpected key")
+		})
+
+		it("returns error if config map does not exist", func() {
+			err := r.Reconcile(context.TODO(), "my-namespace/fake-config-map")
+			require.Error(t, err, "configmap \"fake-config-map\" not found")
+		})
+
+		it("returns error update image fails", func() {
+			lifecycleProvider.returnsOnCall(fmt.Errorf("some update error"))
+			err := r.Reconcile(context.TODO(), "my-namespace/fake-config-map")
+			require.Error(t, err, "some update error")
+		})
 	})
 }
 
-func randomImage(t *testing.T) ggcrv1.Image {
-	image, err := random.Image(5, 10)
-	require.NoError(t, err)
-	return image
+type fakeLifecycleProvider struct {
+	Calls []*corev1.ConfigMap
+	error error
+}
+
+func (f *fakeLifecycleProvider) UpdateImage(cm *corev1.ConfigMap) error {
+	f.Calls = append(f.Calls, cm)
+	return f.error
+}
+
+func (f *fakeLifecycleProvider) returnsOnCall(err error) {
+	f.error = err
 }

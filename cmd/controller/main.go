@@ -20,7 +20,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	"knative.dev/pkg/configmap/informer"
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/injection"
 	"knative.dev/pkg/injection/sharedmain"
@@ -90,7 +89,7 @@ func main() {
 	}
 
 	ctx := signals.NewContext()
-	logger, configMapWatcher, profilingServer := genericControllerSetup(ctx, clusterConfig)
+	logger, profilingServer := genericControllerSetup(ctx, clusterConfig)
 	defer logger.Sync()
 	defer metrics.FlushExporter()
 
@@ -228,9 +227,6 @@ func main() {
 		run(clusterStoreController, routinesPerController),
 		run(sourceResolverController, 2*routinesPerController),
 		func(ctx context.Context) error {
-			return configMapWatcher.Start(ctx.Done())
-		},
-		func(ctx context.Context) error {
 			return profilingServer.ListenAndServe()
 		},
 		func(ctx context.Context) error {
@@ -275,7 +271,7 @@ func newBuildpackRepository(keychain authn.Keychain) func(clusterStore *buildapi
 const controllerCount = 7
 
 // lifted from knative.dev/pkg/injection/sharedmain
-func genericControllerSetup(ctx context.Context, cfg *rest.Config) (*zap.SugaredLogger, *informer.InformedWatcher, *http.Server) {
+func genericControllerSetup(ctx context.Context, cfg *rest.Config) (*zap.SugaredLogger, *http.Server) {
 	metrics.MemStatsOrDie(ctx)
 
 	// Adjust our client's rate limits based on the number of controllers we are running.
@@ -293,7 +289,7 @@ func genericControllerSetup(ctx context.Context, cfg *rest.Config) (*zap.Sugared
 	sharedmain.WatchLoggingConfigOrDie(ctx, cmw, logger, atomicLevel, component)
 	sharedmain.WatchObservabilityConfigOrDie(ctx, cmw, profilingHandler, logger, component)
 
-	return logger, cmw, profilingServer
+	return logger, profilingServer
 }
 
 func waitForSync(stopCh <-chan struct{}, indexFormers ...cache.SharedIndexInformer) {
